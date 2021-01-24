@@ -64,7 +64,7 @@ entity rgb2dvi is
       kGenerateSerialClk : boolean := false;
       kClkPrimitive : string := "MMCM"; -- "MMCM" or "PLL" to instantiate, if kGenerateSerialClk true
       kClkRange : natural := 2;  -- MULT_F = kClkRange*5 (choose >=120MHz=1, >=60MHz=2, >=40MHz=3)      
-      kRstActiveHigh : boolean := false); --true, if active-high; false, if active-low
+      kRstActiveHigh : boolean := false; --true, if active-high; false, if active-low
       kD0Swap : boolean := false;  -- P/N Swap Options
       kD1Swap : boolean := false;
       kD2Swap : boolean := false;

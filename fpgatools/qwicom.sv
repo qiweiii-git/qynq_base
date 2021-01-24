@@ -343,4 +343,240 @@ module event_meter
 endmodule
 */
 
+// ****************************************************************************
+// edge_detect.sv
+// ****************************************************************************
+module edge_detect
+(
+   input                   CLK,
+   input                   DI,
+   output reg              DP,
+   output reg              DN
+);
 
+reg        dir0;
+reg        dir1;
+
+always @(posedge CLK)
+begin
+   dir0 <= DI;
+   dir1 <= dir0;
+
+   if(!dir1 && dir0)
+      DP <= 1'b1;
+   else
+      DP <= 1'b0;
+
+   if(dir1 && !dir0)
+      DN <= 1'b1;
+   else
+      DN <= 1'b0;
+end
+
+endmodule
+
+// ****************************************************************************
+// clock_meter.sv
+// ****************************************************************************
+module clock_meter
+#(
+   parameter               REFCLK_FREQ = 50_000_000
+)
+(
+   input                   CLK_REF,
+   input                   CLK_TST,
+   output     [31:0]       CLK_CNT
+);
+
+wire        time_1s;
+wire        time_1s_sync;
+reg  [31:0] clk_cnt;
+reg  [31:0] clk_cnt_tst;
+wire [31:0] clk_cnt_plus;
+
+time_pulse
+#(
+   .CLK_FREQ ( REFCLK_FREQ )
+)
+u_time_pulse
+(
+   .CLK      ( CLK_REF ),
+   .PULSE    ( time_1s )
+);
+
+sync_load u0_sync_load
+(
+   .ICLK     ( CLK_REF ),
+   .OCLK     ( CLK_TST ),
+   .DI       ( time_1s ),
+   .DO       ( time_1s_sync )
+);
+
+always @(posedge CLK_TST)
+begin
+   clk_cnt <= clk_cnt_plus;
+end
+
+plus1 #(
+   .DWID ( 32 ),
+   .LOOP ( "true" )
+) clk_plus1 (
+   .CLR  ( time_1s_sync ),
+   .EN   ( 1'b1 ),
+   .DI   ( clk_cnt ),
+   .DO   ( clk_cnt_plus )
+);
+
+always @(posedge CLK_TST)
+begin
+   if(time_1s_sync)
+      clk_cnt_tst <= clk_cnt;
+end
+
+assign CLK_CNT = clk_cnt_tst;
+/* TODO
+sync_load u1_sync_load
+(
+   .ICLK     ( CLK_TST ),
+   .OCLK     ( CLK_REF ),
+   .DI       ( clk_cnt_tst ),
+   .DO       ( CLK_CNT )
+);
+*/
+
+endmodule
+
+// ****************************************************************************
+// time_pulse.sv
+// ****************************************************************************
+module time_pulse
+#(
+   parameter              CLK_FREQ = 50_000_000
+)
+(
+   input                  CLK,
+   output                 PULSE
+);
+
+reg  [31:0] clk_cnt = 0;
+wire [31:0] clk_cnt_plus;
+
+always @(posedge CLK)
+begin
+   clk_cnt <= clk_cnt_plus;
+end
+
+assign PULSE = (clk_cnt >= CLK_FREQ - 1)? 1'b1 : 1'b0;
+
+plus1 #(
+   .DWID ( 32 ),
+   .LOOP ( "true" )
+) clk_plus1 (
+   .CLR  ( PULSE ),
+   .EN   ( 1'b1 ),
+   .DI   ( clk_cnt ),
+   .DO   ( clk_cnt_plus )
+);
+
+endmodule
+
+// ****************************************************************************
+// axis_monitor.sv
+// ****************************************************************************
+module axis_monitor
+#(
+   parameter               REFCLK_FREQ = 100_000_000
+)
+(
+   input                   ACLK,
+   input                   AXIS_TUSER,
+   input                   AXIS_TLAST,
+   input                   AXIS_TVALID,
+
+   output reg [7:0]        AXIS_TUSER_CNT,
+   output reg [11:0]       AXIS_TLAST_CNT,
+   output reg [11:0]       AXIS_TVALID_CNT
+);
+
+wire         time_1s;
+reg  [7:0]   tuser_cnt;
+reg  [11:0]  tlast_cnt;
+reg  [11:0]  tvalid_cnt;
+wire [7:0]   tuser_cnt_plus;
+wire [11:0]  tlast_cnt_plus;
+wire [11:0]  tvalid_cnt_plus;
+
+always @(posedge ACLK)
+begin
+   tlast_cnt <= tlast_cnt_plus;
+end
+
+always @(posedge ACLK)
+begin
+   if(AXIS_TUSER && AXIS_TVALID)
+      AXIS_TLAST_CNT <= tlast_cnt;
+end
+
+plus1 #(
+   .DWID ( 12 ),
+   .LOOP ( "false" )
+) u0_plus1 (
+   .CLR  ( AXIS_TUSER && AXIS_TVALID ),
+   .EN   ( AXIS_TLAST && AXIS_TVALID ),
+   .DI   ( tlast_cnt ),
+   .DO   ( tlast_cnt_plus )
+);
+
+always @(posedge ACLK)
+begin
+   tvalid_cnt <= tvalid_cnt_plus;
+end
+
+always @(posedge ACLK)
+begin
+   if(AXIS_TLAST && AXIS_TVALID)
+      AXIS_TVALID_CNT <= tvalid_cnt;
+end
+
+plus1 #(
+   .DWID ( 12 ),
+   .LOOP ( "false" )
+) u1_plus1 (
+   .CLR  ( AXIS_TLAST && AXIS_TVALID ),
+   .EN   ( AXIS_TVALID ),
+   .DI   ( tvalid_cnt ),
+   .DO   ( tvalid_cnt_plus )
+);
+
+always @(posedge ACLK)
+begin
+   tuser_cnt <= tuser_cnt_plus;
+end
+
+always @(posedge ACLK)
+begin
+   if(time_1s)
+      AXIS_TUSER_CNT <= tuser_cnt;
+end
+
+plus1 #(
+   .DWID ( 8 ),
+   .LOOP ( "false" )
+) u2_plus1 (
+   .CLR  ( time_1s ),
+   .EN   ( AXIS_TUSER && AXIS_TVALID ),
+   .DI   ( tuser_cnt ),
+   .DO   ( tuser_cnt_plus )
+);
+
+time_pulse
+#(
+   .CLK_FREQ ( REFCLK_FREQ )
+)
+u_time_pulse
+(
+   .CLK      ( ACLK ),
+   .PULSE    ( time_1s )
+);
+
+endmodule

@@ -27,7 +27,7 @@ proc RunFw { buildName chipType localBuild} {
    if {$localBuild >= 1} {
       # create a new temporary folder for building project
       file delete -force ../.build
-      file copy -force ../build ../.build
+      file copy -force ./ ../.build
 
       cd ../.build
    }
@@ -99,6 +99,23 @@ proc RunFsbl { buildName } {
    close $writeFile
 
    sdk build_project -type all
+}
+
+proc RunStandalone { buildName } {
+   set proc ps7_cortexa9_0
+   set os standalone
+
+   sdk set_workspace ./sw_workspace
+   sdk create_hw_project -name $buildName\_hw -hwspec $buildName.hdf
+   sdk create_bsp_project -name $buildName\_bsp -hwproject $buildName\_hw -proc $proc -os $os
+   sdk create_app_project -name $buildName\_sw -hwproject $buildName\_hw -proc ps7_cortexa9_0 -os standalone -lang C -bsp $buildName\_bsp -app {Empty Application}
+
+   eval file copy -force [glob ../source/*] ./sw_workspace/$buildName\_sw/src/
+   eval file copy -force [glob ../../../code/software/standalone/*] ./sw_workspace/$buildName\_sw/src/
+   sdk build_project -type bsp -name $buildName\_bsp
+   sdk build_project -type app -name $buildName\_sw
+
+   exit
 }
 
 # RunFw qwi00_led xc7z020clg400-2 0
