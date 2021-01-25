@@ -1,6 +1,9 @@
 #******************************************************************************
-# run.tcl
-#
+#    # #              Name   : run.tcl
+#  #     #            Date   : Jan. 25, 2021
+# #    #  #  #     #  Author : Qiwei Wu
+#  #     #  # #  # #  Version: 1.5
+#    # #  #    #   #
 # This module is the tcl script of building project.
 #
 # Change History:
@@ -10,6 +13,7 @@
 #  1.2    Qiwei Wu       Apr. 06, 2020     Add system build
 #  1.3    Qiwei Wu       Sep. 15, 2020     Add local build process
 #  1.4    Qiwei Wu       Nov. 21, 2020     Add FSBL build process
+#  1.5    Qiwei Wu       Jan. 25, 2021     Add Standalone software build process
 #******************************************************************************
 
 proc RunFw { buildName chipType localBuild} {
@@ -112,6 +116,7 @@ proc RunStandalone { buildName } {
 
    eval file copy -force [glob ../source/*] ./sw_workspace/$buildName\_sw/src/
    eval file copy -force [glob ../../../code/software/standalone/*] ./sw_workspace/$buildName\_sw/src/
+   eval file copy -force [glob ../../../code/software/utils/*] ./sw_workspace/$buildName\_sw/src/applications/
    sdk build_project -type bsp -name $buildName\_bsp
    sdk build_project -type app -name $buildName\_sw
 
