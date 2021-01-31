@@ -1,9 +1,10 @@
 #******************************************************************************
-#    # #              Name   : run.tcl
-#  #     #            Date   : Jan. 25, 2021
+#    # #              Name   : Run.tcl
+#  #     #            Date   : Feb. 18, 2019
 # #    #  #  #     #  Author : Qiwei Wu
-#  #     #  # #  # #  Version: 1.5
+#  #     #  # #  # #  Version: 2.0
 #    # #  #    #   #
+#
 # This module is the tcl script of building project.
 #
 # Change History:
@@ -14,9 +15,10 @@
 #  1.3    Qiwei Wu       Sep. 15, 2020     Add local build process
 #  1.4    Qiwei Wu       Nov. 21, 2020     Add FSBL build process
 #  1.5    Qiwei Wu       Jan. 25, 2021     Add Standalone software build process
+#  2.0    Qiwei Wu       Jan. 31, 2021     Add Vitis2020.2 build process
 #******************************************************************************
 
-proc RunFw { buildName chipType localBuild} {
+proc RunFw { buildName chipType localBuild version} {
    # Set CPU count
    set cores 1
    if {![catch {open "/proc/cpuinfo"} f]} {
@@ -46,7 +48,12 @@ proc RunFw { buildName chipType localBuild} {
    source ./FileList.tcl
 
    # create embedding subsystem
-   source ./System.tcl
+   if {$version == 2020} {
+      source ./System2020.tcl
+   } else {
+      source ./System.tcl
+   }
+
 
    # Gobal run generate subsystem
    set_property synth_checkpoint_mode None [get_files ./$buildName.srcs/sources_1/bd/system/system.bd]
@@ -63,9 +70,12 @@ proc RunFw { buildName chipType localBuild} {
 
    # Generate the HDF for the SDK.
    file mkdir $buildName.sdk
-   write_hwdef -force -file $buildName.sdk/$buildName.hdf
-   #set_property pfm_name {} [get_files -all ./$buildName.srcs/sources_1/bd/system/system.bd]
-   #write_hw_platform -fixed -force -file $buildName.sdk/$buildName.xsa
+   if {$version == 2020} {
+      #set_property pfm_name {} [get_files -all ./$buildName.srcs/sources_1/bd/system/system.bd]
+      write_hw_platform -fixed -force -file $buildName.sdk/$buildName.xsa
+   } else {
+      write_hwdef -force -file $buildName.sdk/$buildName.hdf
+   }
 
    # implement
    launch_runs impl_1 -jobs $cores
@@ -103,23 +113,60 @@ proc RunFsbl { buildName } {
    close $writeFile
 
    sdk build_project -type all
+
+   # exit
+   exit
+}
+
+proc RunFsbl2020 { buildName } {
+   # Set Vitis workspace
+   setws ./sw_workspace
+
+   # Create application project
+   app create -name $buildName\_fsbl -hw $buildName.xsa -os standalone -proc ps7_cortexa9_0 -template {Zynq FSBL}
+   app config -name $buildName\_fsbl define-compiler-symbols {FSBL_DEBUG_INFO}
+   app build -name $buildName\_fsbl
+
+   # exit
+   exit
 }
 
 proc RunStandalone { buildName } {
-   set proc ps7_cortexa9_0
-   set os standalone
-
+   # set workspace
    sdk set_workspace ./sw_workspace
    sdk create_hw_project -name $buildName\_hw -hwspec $buildName.hdf
-   sdk create_bsp_project -name $buildName\_bsp -hwproject $buildName\_hw -proc $proc -os $os
+   sdk create_bsp_project -name $buildName\_bsp -hwproject $buildName\_hw -proc $proc -os standalone
    sdk create_app_project -name $buildName\_sw -hwproject $buildName\_hw -proc ps7_cortexa9_0 -os standalone -lang C -bsp $buildName\_bsp -app {Empty Application}
 
+   # copy files
    eval file copy -force [glob ../source/*] ./sw_workspace/$buildName\_sw/src/
    eval file copy -force [glob ../../../code/software/standalone/*] ./sw_workspace/$buildName\_sw/src/
    eval file copy -force [glob ../../../code/software/utils/*] ./sw_workspace/$buildName\_sw/src/applications/
+
+   # build
    sdk build_project -type bsp -name $buildName\_bsp
    sdk build_project -type app -name $buildName\_sw
 
+   # exit
+   exit
+}
+
+proc RunStandalone2020 { buildName } {
+   # Set Vitis workspace
+   setws ./sw_workspace
+
+   # Create application project
+   app create -name $buildName\_sw -hw $buildName.xsa -proc ps7_cortexa9_0 -os standalone -lang C -template {Empty Application}
+
+   # copy files
+   eval file copy -force [glob ../source/*] ./sw_workspace/$buildName\_sw/src/
+   eval file copy -force [glob ../../../code/software/standalone/*] ./sw_workspace/$buildName\_sw/src/
+   eval file copy -force [glob ../../../code/software/utils/*] ./sw_workspace/$buildName\_sw/src/applications/
+
+   # build
+   app build -name $buildName\_sw
+
+   # exit
    exit
 }
 
