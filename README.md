@@ -1,2 +1,0 @@
-# qynq_base
- 
